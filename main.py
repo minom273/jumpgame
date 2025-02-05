@@ -1,53 +1,116 @@
 import pygame
 import random
 
-# 定数の定義
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-PLATFORM_WIDTH = 100
-PLATFORM_HEIGHT = 20
-PLATFORM_SPAWN_INTERVAL = 120  # 足場の出現間隔
-GROUND_HEIGHT = 100  # 地面の高さを設定
-initial_platform_y = 200  # 最初の足場のY座標
-platform_y_offset = 20  # 次の足場を20ピクセル下げるオフセット
-
-# 足場生成関数の定義
-def spawn_platform():
-    global initial_platform_y
-    new_y = initial_platform_y
-    initial_platform_y += platform_y_offset
-    x = random.randint(0, SCREEN_WIDTH - PLATFORM_WIDTH)
-    return pygame.Rect(x, new_y, PLATFORM_WIDTH, PLATFORM_HEIGHT)
-
-# ゲームの初期化
+# 初期化
 pygame.init()
+
+# 定数
+SCREEN_WIDTH = 400
+SCREEN_HEIGHT = 600
+GROUND_HEIGHT = 30
+FPS = 60
+PLATFORM_SPAWN_INTERVAL = 120  # 足場の出現間隔（フレーム数）
+
+# 色
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+GREEN = (0, 255, 0)
+RED = (255, 0, 0)
+
+# スクリーンの設定
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-running = True
+pygame.display.set_caption("Jumping Game")
 
-# 足場の生成管理
-platforms = []
-spawn_timer = 0
+# キャラクターのクラス
+class Player:
+    def __init__(self):
+        self.rect = pygame.Rect(SCREEN_WIDTH // 2 - 15, SCREEN_HEIGHT - GROUND_HEIGHT - 35, 30, 30)  # 最初の位置を下に設定
+        self.velocity_y = 0
+        self.on_ground = True
+        self.jump_power = 0
+        self.gravity = 1
 
-# メインループ
-while running:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-            
-        # フレームごとの更新
-    spawn_timer += 1
-    if spawn_timer >= PLATFORM_SPAWN_INTERVAL:
-        platforms.append(spawn_platform())  # 新しい足場を生成
-        spawn_timer = 0
+    def jump(self):
+        if self.on_ground:
+            self.velocity_y = -self.jump_power
+            self.on_ground = False
+            self.jump_power = 0  # ジャンプパワーをリセット
 
-    screen.fill((0, 0, 0))  # 背景を黒に
+    def update(self):
+        self.velocity_y += self.gravity
+        self.rect.y += self.velocity_y
 
-    # 足場を描画
-    for platform in platforms:
-        pygame.draw.rect(screen, (255, 255, 255), platform)  # 足場を白色で描画
+        if self.rect.y >= SCREEN_HEIGHT - GROUND_HEIGHT - self.rect.height:
+            self.rect.y = SCREEN_HEIGHT - GROUND_HEIGHT - self.rect.height
+            self.on_ground = True
+            self.velocity_y = 0
 
-    # 画面を更新
-    pygame.display.flip()
+# 足場のクラス
+class Platform:
+    def __init__(self, y_position):
+        self.rect = pygame.Rect(random.randint(0, SCREEN_WIDTH - 80), y_position, 80, 10)
 
-# ゲーム終了処理
-pygame.quit()
+    def update(self):
+        self.rect.y += 1  # 足場がゆっくりと下に移動（スクロール速度を減少）
+
+        if self.rect.y > SCREEN_HEIGHT:
+            self.rect.y = -10  # 再生成
+            self.rect.x = random.randint(0, SCREEN_WIDTH - self.rect.width)
+
+# メインゲーム関数
+def main():
+    clock = pygame.time.Clock()
+    player = Player()
+    
+    platforms = []  # 初期の足場を生成
+    spawn_timer = 0
+
+    running = True
+    game_over = False
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+        keys = pygame.key.get_pressed()
+
+        # シフトキーが押されている間、ジャンプパワーを蓄積
+        if keys[pygame.K_LSHIFT]:
+            player.jump_power += 0.5  # パワーを少しずつ増加、最大パワーを制限する
+            if player.jump_power > 15:  # 上限を指定
+                player.jump_power = 15
+
+        # シフトキーが離れた場合にジャンプを実行
+        if not keys[pygame.K_LSHIFT] and player.on_ground:
+            player.jump()
+
+        # マウスの動きに応じて、プレイヤーの位置を調整
+        mouse_x, _ = pygame.mouse.get_pos()
+        if player.on_ground:
+            player.rect.x = mouse_x - player.rect.width // 2  # プレイヤーをマウスに追従させる
+
+        player.update()
+
+        # 足場の出現を管理
+        spawn_timer += 1
+        if spawn_timer >= PLATFORM_SPAWN_INTERVAL:
+            platforms.append(Platform(random.randint(0, SCREEN_WIDTH - 80)))
+            spawn_timer = 0
+
+        # 足場を更新
+        for platform in platforms:
+            platform.update()
+            if platform.rect.colliderect(player.rect) and player.velocity_y > 0:
+                player.on_ground = True
+                player.rect.bottom = platform.rect.top
+                player.velocity_y = 0
+
+        # `player.rect.y`が画面外に出たらゲームオーバー
+        if player.rect.y > SCREEN_HEIGHT:
+            game_over = True
+
+        # 描画
+        screen.fill(BLACK)
+        # 地面を描画
+        pygame.draw.rect
